@@ -6,7 +6,6 @@ jax.config.update('jax_enable_x64',True)
 import scipy.linalg
 from scipy.stats import ortho_group
 from core import Psi4Model, XYZLogger #, load_xyz
-from iodata import load_one, dump_one
 import psi4
 
 #https://github.com/molmod/molmod
@@ -134,31 +133,6 @@ class Localizer:
         self.L_centers = np.einsum('ji,ajk,ki->ia', self.L_occ,
                                    -self.dipole_int, self.L_occ, optimize=True)/angstrom
         self.writer.write(self.Z, self.R, self.L_centers, self.energy)
-    
-    '''Method for writing out the localized orbital info to a fchk file'''
-    def write_orbitals(self, filename='None'):
-        # Assign filename depending if it is given as an input
-        # or if it has to be generated from the elements.
-        if filename == 'None':
-            filename = '../molden-fchk_files/' + self.scheme[0] + '/' + self.generate_molname()
-        else:
-            filename = '../molden-fchk_files/' + filename
-        
-        # Write out the molden file using psi4
-        psi4.molden(self.model.wavefunction, filename + '.molden')
-        
-        # Using IOData, we load in the molden file. We alter the 
-        # values of the coefficients using the localized coefficients.
-        # Finally we write them out to a FCHK file and remove the molden file
-        molecule = load_one(filename + '.molden')
-        molecule_mo = molecule.mo
-        mo_coeffs = molecule_mo.coeffs
-        # replace the occupied orbital coefficients with the localized ones.
-        self.L_occ = np.dot(self.C_occ,self.W)
-        mo_coeffs[:,:self.N_occ] = self.L_occ
-        molecule_mo.coeffs = mo_coeffs
-        dump_one(molecule, filename + '.fchk')
-        os.remove(filename + '.molden')
     
     '''Simple setter to choose cost function'''
     def set_scheme(self, name, p=1.0):
