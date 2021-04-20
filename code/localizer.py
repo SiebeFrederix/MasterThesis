@@ -20,7 +20,7 @@ import os, sys
 class Localizer:
     
     '''Initializer'''
-    def __init__(self, numbers, positions, index=-1, basisset='6-311ppg_d_p_'):
+    def __init__(self, numbers, positions, index=-1, basisset='6-311ppg_d_p_', lot='scf'):
         # index of the molecule in the qm7 data set needed
         # filenames of the xyz files.
         self.index = index
@@ -39,7 +39,7 @@ class Localizer:
 #         basisset = '6-311ppg_d_p_'
 
         # calculating energies and initialising the psi4 integral calculator
-        self.model = Psi4Model(method = 'scf', basis = basisset,
+        self.model = Psi4Model(method = lot, basis = basisset,
                   psi4_output = '../psi4_output/psi4_output.dat', cores=2, memory=3e+09)
         self.energy, self.gpos = self.model.compute(self.Z, self.R, field_type = 'dipole',
                                                dipole_strength = [0, 0, 0], charge = 0, forces = True)
