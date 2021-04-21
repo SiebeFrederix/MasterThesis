@@ -51,11 +51,13 @@ if __name__ == '__main__':
                        'ValueCostV4' : float(loc.V4_cost(loc.W))}
         
         if args.scheme != 'PM':
-            output_dict['nSteps'] = int(np.where(loc.conv_hist != 0.)[0][-1]
-    
+            output_dict['nSteps'] = int(np.where(loc.conv_hist != 0.)[0][-1])
+        
         loc.write_centers(folder= '../xyz_files/' + foldername)
         
         output_list.append(output_dict)
+        
+        loc.model.clean()
     
     json_filename = '../benchmarking/' + foldername + args.scheme + '/'
     json_filename += args.scheme + '_' + str(args.start) + '_' + str(args.stop) + '.json'
