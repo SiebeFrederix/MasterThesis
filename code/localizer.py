@@ -7,7 +7,9 @@ import scipy.linalg
 from scipy.stats import ortho_group
 from core import Psi4Model, XYZLogger #, load_xyz
 from iodata import load_one, dump_one
+import electrostatics as esp
 import psi4
+import json
 
 #https://github.com/molmod/molmod
 from molmod.units import angstrom, debye
@@ -20,7 +22,8 @@ import os, sys
 class Localizer:
     
     '''Initializer'''
-    def __init__(self, numbers, positions, index=-1, basisset='6-311ppg_d_p_', lot='scf'):
+    def __init__(self, numbers, positions, index=-1, basisset='6-311ppg_d_p_',
+                 lot='scf', cores=2, memory=3e+09, check_import=False):
         # index of the molecule in the qm7 data set needed
         # filenames of the xyz files.
         self.index = index
@@ -35,14 +38,28 @@ class Localizer:
         
         # Choosing the basisset, for testing use a smaller set. The ERI's
         # scale very badly as a function of the basisset size.
+        self.basisset = basisset
+        self.lot = lot
 #         basisset = 'aug-cc-pvtz'
 #         basisset = '6-311ppg_d_p_'
-
+        
+        # Check if we want to import the data, when using the ER
+        # scheme we will have to do the calculation. This is because
+        # saving the ERI's uses way to much memory.
+        if check_import:
+            self.import_psi4_data(cores, memory)
+        else:
+            self.generate_psi4_data(cores, memory)
+    
+    '''
+    Generating all the nessecarry data needed for all localization calculations.
+    '''
+    def generate_psi4_data(self, cores=2, memory=3e+09):
         # calculating energies and initialising the psi4 integral calculator
-        self.model = Psi4Model(method = lot, basis = basisset,
-                  psi4_output = '../psi4_output/psi4_output.dat', cores=2, memory=3e+09)
-        self.energy, self.gpos = self.model.compute(self.Z, self.R, field_type = 'dipole',
-                                               dipole_strength = [0, 0, 0], charge = 0, forces = True)
+        self.model = Psi4Model(method = self.lot, basis = self.basisset,
+                  psi4_output = '../psi4_output/psi4_output.dat', cores=cores, memory=memory)
+        self.energy = self.model.compute(self.Z, self.R, field_type = 'dipole',
+                                         dipole_strength = [0, 0, 0], charge = 0)
         self.mints = psi4.core.MintsHelper(self.model.wavefunction)
         
         # Retrieve occupied canonical coefficients
@@ -71,7 +88,8 @@ class Localizer:
         
         # Setting up the quadrupole matrix, we agian have to do this in a 
         # cumbersome way because psi4 outputs only the components of the quadrupole
-        # matrix and nog the matrix itself.
+        # matrix and nog the matrix itself. Also, when writing out the localized
+        # orbitals, the calcuation has to be performed to get the fchk file.
         self.quadrupole_matrix_elem = np.zeros((3,3,self.N_occ,self.N_occ))
         self.quadrupole_matrix_elem[0,0] = quadrupole_components[0]
         self.quadrupole_matrix_elem[0,1] = quadrupole_components[1]
@@ -87,9 +105,68 @@ class Localizer:
         self.quadrupole_matrix = np.einsum('abii->iab', self.quadrupole_matrix_elem, 
                                            optimize = True)
     
+    '''
+    If the psi4 data already exist, it gets read in with this function
+    in order to do no unnessecarry calculations. If it doesn't exist,
+    the data will be generated using another function.
+    '''
+    def import_psi4_data(self, cores=2, memory=3e+09):
+        # Set path to read data
+        foldername = '../ab_initio_data/' + self.basisset + '/'
+        filename = self.generate_molname(scheme_name=False) + '_' + self.basisset + '_' + self.lot + '.json'
+        
+        # Check if the json file already exists, in that case import it.
+        try:
+            with open(foldername + filename, 'r') as read_file:
+                input_dict = json.load(read_file)
+            print('Imported data for: ' + self.generate_molname(scheme_name=False))
+
+            self.C_occ = np.array(input_dict['AlphaCoeffs'])
+            self.N_occ = input_dict['NOrbitals']
+            self.center_matrix = np.array(input_dict['CenterMatrix'])
+            self.quadrupole_matrix_elem = np.array(input_dict['QuadrupoleMatrixElems'])
+            self.quadrupole_matrix = np.array(input_dict['QuadrupoleMatrix'])
+            self.energy = input_dict['TotalEnergy']
+        # if the json file does not exist, we perform the calculation and store
+        # its output in a new file.
+        except IOError:
+            print('generating data for: ' + self.generate_molname(scheme_name=False))
+            
+            self.generate_psi4_data(cores, memory)
+            self.write_psi4_data()
+            self.model.clean()
+    
+    '''
+    Function which writes out the psi4 data such that this doesn't
+    have to be calculated twice
+    '''
+    def write_psi4_data(self):
+        print('writing out psi4 data for molecule: ' + self.generate_molname(scheme_name=False))
+        
+        # Put all relavent data in a dictionary (converting np.array's
+        # to lists). We only save the necessary variables, these json
+        # can get big.
+        output_dict = {'AlphaCoeffs' : self.C_occ.tolist(),
+                       'NOrbitals' : int(self.N_occ),
+#                        'DipoleIntegrals' : self.dipole_int.tolist(),
+#                        'QuadrupoleIntegrals' : self.quadrupole_int.tolist(),
+                       'CenterMatrix' : self.center_matrix.tolist(),
+                       'QuadrupoleMatrixElems' : self.quadrupole_matrix_elem.tolist(),
+                       'QuadrupoleMatrix' : self.quadrupole_matrix.tolist(),
+                       'TotalEnergy' : float(self.energy)}
+        
+        # Set path to save the data
+        foldername = '../ab_initio_data/' + self.basisset + '/'
+        filename = self.generate_molname(scheme_name=False) + '_' + self.basisset + '_' + self.lot + '.json'
+        
+        # Write out data to a json-file
+        with open(foldername + filename, 'w') as fout:
+            json.dump(output_dict, fout)
+        fout.close()
+    
     
     '''Generating molecule name from the components of the molecule'''
-    def generate_molname(self):
+    def generate_molname(self, scheme_name=True):
         # stupid way of creating molecule names, but it works
         # First write index of array, then molecular contents
         # also use '0003' for 3 element in array
@@ -108,7 +185,11 @@ class Localizer:
                 filename += elem_names[i]
             elif n_el != 0:
                 filename += elem_names[i] + str(n_el)
-        return filename + '_' + self.scheme[0]
+        if scheme_name:
+            filename += '_' + self.scheme[0]
+            if self.scheme[0] in ['FB_p', 'V2', 'V5']:
+                filename += '_p_' + str(self.scheme[1])[:5]
+        return filename
         
     
     '''
@@ -130,9 +211,8 @@ class Localizer:
         # nuclear_repulsion, nai, kin, forces = -gpos, charge = 0)
         self.writer = XYZLogger(self.filename, append = append)
 
-        self.L_occ = np.dot(self.C_occ,self.W)
-        self.L_centers = np.einsum('ji,ajk,ki->ia', self.L_occ,
-                                   -self.dipole_int, self.L_occ, optimize=True)/angstrom
+        self.L_centers = np.einsum('ji,jka,ki->ia', self.W,
+                                   self.center_matrix, self.W, optimize=True)/angstrom
         self.writer.write(self.Z, self.R, self.L_centers, self.energy)
     
     '''Method for writing out the localized orbital info to a fchk file'''
@@ -199,6 +279,10 @@ class Localizer:
             self.q = 8
         elif name == 'V4':
             self.cost_function = jax.jit(self.V4_cost)
+            self.cost_grad = jax.jit(jax.grad(self.cost_function))
+            self.q = 8
+        elif name == 'V5':
+            self.cost_function = jax.jit(self.V5_cost)
             self.cost_grad = jax.jit(jax.grad(self.cost_function))
             self.q = 8
         elif name != 'PM':
@@ -375,6 +459,16 @@ class Localizer:
         q_diff_traceless = q_diff - jnp.trace(q_diff)*jnp.eye((3))/3.
         
         return -jnp.sum(q_diff_traceless**2)
+    
+    '''
+    My own implementation of the cost function. The main goal is that the 
+    traceless quadrupole of the localized centers is as close as possible 
+    to the total QM traceless quadrupole. This difference is used as a 
+    penalty to the FB cost function.
+    Version 4.0
+    '''
+    def V5_cost(self,W):
+        return self.FB_cost(W) + self.scheme[1]*self.V4_cost(W)
     
     ''' 
     Function that calculates the conjugate gradient parameter of
@@ -670,6 +764,45 @@ class Localizer:
         
         # Return the difference in quadrupole moment in atomic units.
         return (self.total_quadrupole - self.total_loc_quadrupole)
+    
+    
+    '''
+    A method of calculating the relative-root-mean-square-deviation between the
+    electrostatic potential computed quantum mechanically and classically using
+    the localized centers. Here, the electrostatic.py file is used to generate
+    the grid and calculate the classical ESPs.
+    '''
+    def compute_esp_rrmsd(self, r_max=7., min_points=1000):
+        print('generating grid')
+        grid = esp.generate_coords(self.R, self.Z, r_max=r_max, min_points=min_points)
+        
+        folder = '../data/potential_data/' + self.basisset + '/'
+        filename = (self.generate_molname(scheme_name=False) + '_' + self.basisset + 
+                    '_' + self.lot + '_mp_' + str(min_points) + '.dat')
+        
+        try:
+            qm_esp = np.loadtxt(folder+filename)
+            print('Potential data loaded')
+        except OSError:
+            print('Calculating QM ESP at the gridpoints')
+            psi4.oeprop(self.model.wavefunction, 'GRID_ESP')
+            print('Saving QM ESP')
+            qm_esp = np.loadtxt('grid_esp.dat')
+            np.savetxt(folder+filename, qm_esp)
+        
+        print('Computing classical ESP')
+        self.L_centers = np.einsum('ji,jka,ki->ia', self.W,
+                                   self.center_matrix, self.W, optimize=True)/angstrom
+        
+        nuc_esp = esp.calculate_ESP(grid, self.R, self.Z)
+        elec_esp = esp.calculate_ESP(grid, self.L_centers, np.full((self.N_occ),-2.))
+        clas_esp = (nuc_esp + elec_esp)/angstrom
+#         print(np.min(np.abs(clas_esp)))
+        
+        print('Valid points: ' + str(len(clas_esp)))
+        self.Errmsd = np.sqrt(np.sum(((qm_esp - clas_esp)/clas_esp)**2)/len(clas_esp))
+        self.Ermsd = np.sqrt(np.sum((qm_esp - clas_esp)**2)/len(clas_esp))
+        
         
     '''
     Internal method of Psi4 for calculating the quadrupole moments.
@@ -704,9 +837,9 @@ class Localizer:
         # Fixing the filename to include sweep parameters
         self.set_scheme(scheme)
         # Getting rid of the '.xyz'
-        filename = '../xyz_files/local_runs/' + scheme + '/' + self.generate_molname()
-        filename += ('_MIN_' + (str(p_min)[:5]).replace('-','n') + '_MAX_' + str(p_max)[:5] +
-                   '_S_' + str(steps) + '.xyz')
+#         filename = '../xyz_files/local_runs/' + scheme + '/' + self.generate_molname()
+        filename = (self.generate_molname() + '_MIN_' + (str(p_min)[:5]).replace('-','n') 
+                    + '_MAX_' + str(p_max)[:5] + '_S_' + str(steps) + '.xyz')
         
         # Making sure the file is empty when writing to it
         open(filename,'w').close()
@@ -716,13 +849,26 @@ class Localizer:
         # are also saved and returned.
         weight = np.linspace(p_min,p_max,steps)
         quad_diff = np.zeros((steps,3,3))
+        V4_cost_val = np.zeros((steps))
+        optimizer_convergence = np.zeros((steps))
         for i,w in enumerate(weight):
             self.set_scheme(scheme, w)
             print(self.scheme)
             self.optimize_line_search()
             self.write_centers(append=True, filename=filename)
             quad_diff[i] = self.compare_quadrupole()
-        return weight, quad_diff
+            V4_cost_val[i] = self.V4_cost(self.W)
+            # pick the last non-zero entry
+            optimizer_convergence[i] = self.conv_hist[np.where(self.conv_hist != 0.)][-1]
+        
+        # We output the relevant data using a dictionary such
+        # that it can be easily written to a json file.
+        output_dict = {'PenaltyVals' : weight.tolist(),
+                       'QuadDifference' : quad_diff.tolist(),
+                       'V4CostVals' : V4_cost_val.tolist(),
+                       'OptimizerConv' : optimizer_convergence.tolist()}
+        
+        return output_dict
         
     def calc_shifted_quadrupole(self):
         # calculating the dipole moment using the localized orbitals
