@@ -5,7 +5,7 @@ jax.config.update('jax_enable_x64',True)
 # jax.config.update('jax_log_compiles',True)
 import scipy.linalg
 from scipy.stats import ortho_group
-from core import Psi4Model, XYZLogger #, load_xyz
+from core import Psi4Model, XYZLogger, MoleculeString #, load_xyz
 from iodata import load_one, dump_one
 import electrostatics as esp
 import psi4
@@ -57,7 +57,7 @@ class Localizer:
     def generate_psi4_data(self, cores=2, memory=3e+09):
         # calculating energies and initialising the psi4 integral calculator
         self.model = Psi4Model(method = self.lot, basis = self.basisset,
-                  psi4_output = '../psi4_output/psi4_output.dat', cores=cores, memory=memory)
+                  psi4_output = '../data/psi4_output/psi4_output.dat', cores=cores, memory=memory)
         self.energy = self.model.compute(self.Z, self.R, field_type = 'dipole',
                                          dipole_strength = [0, 0, 0], charge = 0)
         self.mints = psi4.core.MintsHelper(self.model.wavefunction)
@@ -112,7 +112,7 @@ class Localizer:
     '''
     def import_psi4_data(self, cores=2, memory=3e+09):
         # Set path to read data
-        foldername = '../ab_initio_data/' + self.basisset + '/'
+        foldername = '../data/ab_initio_data/' + self.basisset + '/'
         filename = self.generate_molname(scheme_name=False) + '_' + self.basisset + '_' + self.lot + '.json'
         
         # Check if the json file already exists, in that case import it.
@@ -156,7 +156,7 @@ class Localizer:
                        'TotalEnergy' : float(self.energy)}
         
         # Set path to save the data
-        foldername = '../ab_initio_data/' + self.basisset + '/'
+        foldername = '../data/ab_initio_data/' + self.basisset + '/'
         filename = self.generate_molname(scheme_name=False) + '_' + self.basisset + '_' + self.lot + '.json'
         
         # Write out data to a json-file
@@ -197,7 +197,7 @@ class Localizer:
     Initializes the writer, is not in __init__ because it is not always needed.
     Includes a stupid way of generating molecule names
     '''
-    def write_centers(self, append=False, folder='../xyz_files/local_runs/', filename='None'):
+    def write_centers(self, append=False, folder='../data/xyz_files/local_runs/', filename='None'):
         # Assign filename depending if it is given as an input
         # or if it has to be generated from the elements.
         if filename == 'None':
@@ -220,9 +220,9 @@ class Localizer:
         # Assign filename depending if it is given as an input
         # or if it has to be generated from the elements.
         if filename == 'None':
-            filename = '../molden-fchk_files/' + self.scheme[0] + '/' + self.generate_molname()
+            filename = '../data/molden-fchk_files/' + self.scheme[0] + '/' + self.generate_molname()
         else:
-            filename = '../molden-fchk_files/' + filename
+            filename = '../data/molden-fchk_files/' + filename
         
         # Write out the molden file using psi4
         psi4.molden(self.model.wavefunction, filename + '.molden')
@@ -572,7 +572,7 @@ class Localizer:
     JAX's automatic differentiation to calculate the gradient of the cost function.
     A line search algorithm along the geodesic is used to find the optimal stepsize.
     '''
-    def optimize_line_search(self, nsteps=400, psi4_guess=False, save_iteration=-1):
+    def optimize_line_search(self, nsteps=600, psi4_guess=False, save_iteration=-1):
         print('Optimizing cost function: ' + self.scheme[0])
         # If the Pipek-Mezey cost function has to be optimized,
         # we run it under the hood via Psi4.
@@ -772,13 +772,14 @@ class Localizer:
     the localized centers. Here, the electrostatic.py file is used to generate
     the grid and calculate the classical ESPs.
     '''
-    def compute_esp_rrmsd(self, r_max=7., min_points=1000):
+    def compute_esp_rmsd(self, r_max=7., min_points=50000):
         print('generating grid')
         grid = esp.generate_coords(self.R, self.Z, r_max=r_max, min_points=min_points)
         
         folder = '../data/potential_data/' + self.basisset + '/'
         filename = (self.generate_molname(scheme_name=False) + '_' + self.basisset + 
-                    '_' + self.lot + '_mp_' + str(min_points) + '.dat')
+                    '_' + self.lot + '_mp_' + str(min_points) + '_rm_' + 
+                    str(r_max)[:5].replace('.','-') + '.dat')
         
         try:
             qm_esp = np.loadtxt(folder+filename)
@@ -800,9 +801,32 @@ class Localizer:
 #         print(np.min(np.abs(clas_esp)))
         
         print('Valid points: ' + str(len(clas_esp)))
-        self.Errmsd = np.sqrt(np.sum(((qm_esp - clas_esp)/clas_esp)**2)/len(clas_esp))
-        self.Ermsd = np.sqrt(np.sum((qm_esp - clas_esp)**2)/len(clas_esp))
+#         self.Errmsd = np.sqrt(np.sum(((qm_esp - clas_esp)/clas_esp)**2)/len(clas_esp))
+        self.Ersd = np.sqrt(np.sum((qm_esp - clas_esp)**2))
+        self.esp_points = len(clas_esp)
+        return self.Ersd
+    
+    '''
+    Root mean distance metric, this is for measuring how much the center
+    positions deviate from the FB center positions.
+    '''
+    def rmd_centers(self, ref_r, prev_r, next_r):
+        re_idx = np.zeros(self.N_occ).astype(int)
         
+        # Loop over all centers of the new iteration
+        for i, c in enumerate(next_r):
+            # Calculate all the distances wrt to all centers from
+            # the previous iteration. This to sort them in the 
+            # order of ref_r.
+            distances = esp.distance_grid(prev_r.transpose(), c)
+
+            # We sort the centers according to the original FB_centers
+            re_idx[np.argmin(distances)] = i
+
+        next_r = next_r[re_idx]
+        ref_dist = esp.distance_grid((next_r-ref_r).transpose())
+        
+        return next_r, np.sqrt(np.sum(ref_dist)/self.N_occ)
         
     '''
     Internal method of Psi4 for calculating the quadrupole moments.
@@ -833,7 +857,8 @@ class Localizer:
     the cost function (if it has one). It writes out the important 
     variables to a data file.
     '''
-    def perform_sweep(self, p_min=0., p_max=1., steps=10, scheme='V1'):
+    def perform_sweep(self, p_min=0., p_max=1., steps=10,
+                      scheme='V5', inc_pot=False):
         # Fixing the filename to include sweep parameters
         self.set_scheme(scheme)
         # Getting rid of the '.xyz'
@@ -844,18 +869,40 @@ class Localizer:
         # Making sure the file is empty when writing to it
         open(filename,'w').close()
         
+        # Generate the FB reference centers for the rmd metric
+        self.set_scheme('FB')
+        self.optimize_line_search()
+        self.write_centers()
+        FB_ref_centers = self.L_centers
+        prev_centers = self.L_centers
+        
         # Initializing loop for sweep, every points parameters are
         # writen to the terminal. The quadrupole difference and weigths
         # are also saved and returned.
         weight = np.linspace(p_min,p_max,steps)
+        rmd_FB = np.zeros((steps))
+        if inc_pot:
+            esp_rmsd = np.zeros((steps))
         quad_diff = np.zeros((steps,3,3))
         V4_cost_val = np.zeros((steps))
         optimizer_convergence = np.zeros((steps))
+        
         for i,w in enumerate(weight):
             self.set_scheme(scheme, w)
             print(self.scheme)
             self.optimize_line_search()
             self.write_centers(append=True, filename=filename)
+            
+            # Calculate the rmd wrt to the FB centers.
+            next_centers = self.L_centers
+            prev_centers, rmd_FB[i] = self.rmd_centers(FB_ref_centers, prev_centers,
+                                                       next_centers)
+            
+            # If requested, we calculate the rmsd of the
+            # electrostatic potential. (NOTE: this is expensive)
+            if inc_pot:
+                esp_rmsd[i] = self.compute_esp_rmsd()
+            
             quad_diff[i] = self.compare_quadrupole()
             V4_cost_val[i] = self.V4_cost(self.W)
             # pick the last non-zero entry
@@ -864,9 +911,12 @@ class Localizer:
         # We output the relevant data using a dictionary such
         # that it can be easily written to a json file.
         output_dict = {'PenaltyVals' : weight.tolist(),
+                       'RootMeanDisplacement' : rmd_FB.tolist(),
                        'QuadDifference' : quad_diff.tolist(),
                        'V4CostVals' : V4_cost_val.tolist(),
                        'OptimizerConv' : optimizer_convergence.tolist()}
+        if inc_pot:
+            output_dict['ESPrmsd'] = esp_rmsd.tolist()
         
         return output_dict
         

@@ -1,8 +1,4 @@
 import numpy as np
-from iodata import load_one, dump_one
-
-#https://github.com/molmod/molmod
-from molmod.units import angstrom, debye
 
 
 '''
@@ -21,7 +17,7 @@ def generate_grid(R, r_max=7., min_points=1000.):
     return grid
 
 '''The efficient numpy way of computing distances'''
-def distance_grid(grid, offset):
+def distance_grid(grid, offset=np.zeros((3))):
     return np.sqrt((grid[0] - offset[0])**2 +
                    (grid[1] - offset[1])**2 +
                    (grid[2] - offset[2])**2)
@@ -44,16 +40,18 @@ def generate_mask(grid, R, Z, r_max=7.):
         dist_grid = distance_grid(grid, pos)
         
         # if gridpoint lays within the VdW radius, it
-        # gets turned off.
+        # gets set to -1, this indicates the interior 
+        # region. 
         grid_min = np.where(dist_grid < vdw_radii[int(z)-1])
-        mask[grid_min] = 0
+        mask[grid_min] = -1
         
         # Check if gridpoint lays outside r_max
         grid_max = np.where(dist_grid > r_max)
         mask_max[grid_max] += 1
     
     # If gridpoint lays outside r_max for every
-    # atom, it gets turned off.
+    # atom, it gets set to 0, this indicates the
+    # exterior region.
     max_idx = np.where(mask_max == len(Z))
     mask[max_idx] = 0
     return mask
