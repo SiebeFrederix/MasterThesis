@@ -132,8 +132,8 @@ class Psi4Model(object):
         if not rvec is None:
             print('Warning: psi4 does not work with periodic boundary conditions. Ignoring them.')
         
-        molecule_string = MoleculeString(elements, positions, charge = charge, multiplicity = multiplicity, reorient = False, no_symmetry = True, no_com = True, verbose = False)
-        mol = psi4.geometry(molecule_string.geometry) # De input moet in angstrom staan
+        self.molecule_string = MoleculeString(elements, positions, charge = charge, multiplicity = multiplicity, reorient = False, no_symmetry = True, no_com = True, verbose = False)
+        self.mol = psi4.geometry(self.molecule_string.geometry) # De input moet in angstrom staan
         
         if field_type == 'dipole':
             #print('Perturbing with a constant electric field')  
@@ -160,7 +160,7 @@ class Psi4Model(object):
                 self.gradient = self.wavefunction.gradient()
                 return self.energy, mol.geometry().np / angstrom, self.gradient.np
             else:
-                return self.energy, mol.geometry().np / angstrom
+                return self.energy, self.mol.geometry().np / angstrom
 
         if forces:
             self.gradient, self.wavefunction = psi4.gradient(self.method, return_wfn = True)

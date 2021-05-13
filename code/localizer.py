@@ -55,6 +55,8 @@ class Localizer:
     Generating all the nessecarry data needed for all localization calculations.
     '''
     def generate_psi4_data(self, cores=2, memory=3e+09):
+        print('generating data for: ' + self.generate_molname(scheme_name=False))
+        
         # calculating energies and initialising the psi4 integral calculator
         self.model = Psi4Model(method = self.lot, basis = self.basisset,
                   psi4_output = '../data/psi4_output/psi4_output.dat', cores=cores, memory=memory)
@@ -104,6 +106,12 @@ class Localizer:
         # Calculating the quadrupole matrix for each orbital.
         self.quadrupole_matrix = np.einsum('abii->iab', self.quadrupole_matrix_elem, 
                                            optimize = True)
+        
+        # No harm in writing out the data
+        self.write_psi4_data()
+        
+        # Can be used to check if the model has to be cleaned afterwards
+        self.is_imported = False
     
     '''
     If the psi4 data already exist, it gets read in with this function
@@ -127,14 +135,12 @@ class Localizer:
             self.quadrupole_matrix_elem = np.array(input_dict['QuadrupoleMatrixElems'])
             self.quadrupole_matrix = np.array(input_dict['QuadrupoleMatrix'])
             self.energy = input_dict['TotalEnergy']
+            self.is_imported = True
         # if the json file does not exist, we perform the calculation and store
         # its output in a new file.
         except IOError:
-            print('generating data for: ' + self.generate_molname(scheme_name=False))
-            
             self.generate_psi4_data(cores, memory)
-            self.write_psi4_data()
-            self.model.clean()
+#             self.model.clean()
     
     '''
     Function which writes out the psi4 data such that this doesn't
@@ -201,7 +207,8 @@ class Localizer:
         # Assign filename depending if it is given as an input
         # or if it has to be generated from the elements.
         if filename == 'None':
-            self.filename = folder + self.scheme[0] + '/' + self.generate_molname() + '.xyz'
+            self.filename = (folder + self.scheme[0] + '/' + self.generate_molname() + 
+                             '_' + self.basisset + '_' + self.lot + '.xyz')
         else:
             self.filename = folder + self.scheme[0] + '/' + filename
         
@@ -214,6 +221,8 @@ class Localizer:
         self.L_centers = np.einsum('ji,jka,ki->ia', self.W,
                                    self.center_matrix, self.W, optimize=True)/angstrom
         self.writer.write(self.Z, self.R, self.L_centers, self.energy)
+        
+        print('Geometry data written to: ' + self.filename)
     
     '''Method for writing out the localized orbital info to a fchk file'''
     def write_orbitals(self, filename='None'):
@@ -826,7 +835,7 @@ class Localizer:
         next_r = next_r[re_idx]
         ref_dist = esp.distance_grid((next_r-ref_r).transpose())
         
-        return next_r, np.sqrt(np.sum(ref_dist)/self.N_occ)
+        return next_r, np.sqrt(np.sum(ref_dist**2)/self.N_occ)
         
     '''
     Internal method of Psi4 for calculating the quadrupole moments.
@@ -858,16 +867,18 @@ class Localizer:
     variables to a data file.
     '''
     def perform_sweep(self, p_min=0., p_max=1., steps=10,
-                      scheme='V5', inc_pot=False):
+                      scheme='V5', inc_pot=False, folder='none'):
         # Fixing the filename to include sweep parameters
         self.set_scheme(scheme)
-        # Getting rid of the '.xyz'
-#         filename = '../xyz_files/local_runs/' + scheme + '/' + self.generate_molname()
+        # Making sure that we can write to the right file if we
+        # perform sweeps on the hpc
+        if folder == 'none':
+            folder = '../data/xyz_files/local_runs/' + scheme + '/'
         filename = (self.generate_molname() + '_MIN_' + (str(p_min)[:5]).replace('-','n') 
                     + '_MAX_' + str(p_max)[:5] + '_S_' + str(steps) + '.xyz')
         
         # Making sure the file is empty when writing to it
-        open(filename,'w').close()
+        open(folder + filename,'w').close()
         
         # Generate the FB reference centers for the rmd metric
         self.set_scheme('FB')
