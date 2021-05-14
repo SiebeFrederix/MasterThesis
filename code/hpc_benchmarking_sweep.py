@@ -55,7 +55,8 @@ if __name__ == '__main__':
         sweep_dict = loc.perform_sweep(p_min=0.,p_max=5., steps=30, scheme=args.scheme,
                                        folder='../data/xyz_files/' + foldername + 'sweeps/')
         
-        output_dict = {'SweepDict' : sweep_dict,
+        output_dict = {'MolNameIdx' : loc.generate_molname(scheme_name=False),
+                       'SweepDict' : sweep_dict,
                        'FinalQuadCompare' : loc.compare_quadrupole().tolist(),
                        'FinalQuadTotal' : loc.total_quadrupole.tolist(),
                        'FinalQuadLocal' : loc.total_loc_quadrupole.tolist(),
