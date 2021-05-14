@@ -210,7 +210,7 @@ class Localizer:
             self.filename = (folder + self.scheme[0] + '/' + self.generate_molname() + 
                              '_' + self.basisset + '_' + self.lot + '.xyz')
         else:
-            self.filename = folder + self.scheme[0] + '/' + filename
+            self.filename = folder + filename
         
         # Wegschrijven van de data, kan ook via een .npz file zoals in Toon zijn script
         # Meer informatie wegschrijven is ook mogelijk:
@@ -405,7 +405,7 @@ class Localizer:
         
         # Shifting the quadrupole tensor to the origin.
         q_origin = q_loc + p_matrix
-        self.q_origin = q_origin
+#         self.q_origin = q_origin
         
         # Calculating the trace of the quadrupole matrices.
         q_trace = (jnp.einsum('iaa->i', q_origin, optimize=True)/3.).reshape(self.N_occ,1,1)
@@ -419,6 +419,7 @@ class Localizer:
         penalty = jnp.sum(q_traceless**2)
         
         return self.FB_cost(W) - weight*penalty
+#         return -weight*penalty
     
     '''
     My own implementation of the cost function. This has high resemblence
@@ -581,7 +582,15 @@ class Localizer:
     JAX's automatic differentiation to calculate the gradient of the cost function.
     A line search algorithm along the geodesic is used to find the optimal stepsize.
     '''
-    def optimize_line_search(self, nsteps=600, psi4_guess=False, save_iteration=-1):
+    def optimize_line_search(self, nsteps=600, psi4_guess=False, save_iteration=-1,
+                             n_restarts=0):
+        # The alg can get stuck in a reset loop, if this happens too many
+        # times we will abort the calculation. This is probably due to 
+        # the cost function being badly conditioned.
+        if n_restarts == 15:
+            print('Restarted 15 times, algorithm will not converge: ABORT')
+            return False
+        
         print('Optimizing cost function: ' + self.scheme[0])
         # If the Pipek-Mezey cost function has to be optimized,
         # we run it under the hood via Psi4.
@@ -641,13 +650,14 @@ class Localizer:
                 # every single loop with the optimization not converging.
                 # If H is reset 5 consecutive times, we will restart the
                 # full optimization.
-                teller = np.einsum('ij,ij',H,riemann_grad,optimize=True)
-                noemer = np.sqrt(np.einsum('ij,ij',H,H,optimize=True)*
-                                 np.einsum('ij,ij',riemann_grad,riemann_grad,optimize=True))
+                numerator = np.einsum('ij,ij',H,riemann_grad,optimize=True)
+                denominator = np.sqrt(np.einsum('ij,ij',H,H,optimize=True)*
+                                      np.einsum('ij,ij',riemann_grad,riemann_grad,optimize=True))
                 if consec_resets == 5:
                     print('Conjugate gradient resetted 5 consecutive times: REINITIALIZING')
-                    return self.optimize_line_search(nsteps, save_iteration=save_iteration)
-                elif(teller < noemer*1e-3):
+                    return self.optimize_line_search(nsteps, save_iteration=save_iteration,
+                                                     n_restarts= n_restarts + 1)
+                elif(numerator < denominator*1e-3):
                     print('reset at iteration:' + str(i))
                     H = riemann_grad
                     consec_resets += 1
@@ -692,7 +702,8 @@ class Localizer:
             # run. This means that the first guess was bad.
             if((mu < 1e-10) and (i == 0)):
                 print('Stepsize < 10^-10 in first iteration: REINITIALIZING')
-                return self.optimize_line_search(nsteps, save_iteration=save_iteration)
+                return self.optimize_line_search(nsteps, save_iteration=save_iteration,
+                                                 n_restarts=n_restarts)
             elif((mu < 1e-10)):
                 print('No convergence: stepsize < 10^-10')
                 self.conv_hist = conv
@@ -901,8 +912,11 @@ class Localizer:
         for i,w in enumerate(weight):
             self.set_scheme(scheme, w)
             print(self.scheme)
-            self.optimize_line_search()
-            self.write_centers(append=True, filename=filename)
+            conv = self.optimize_line_search()
+            if not conv:
+                print('parameter too high, cost badly conditioned: NO CONVERGENCE/ABORTED')
+                break
+            self.write_centers(append=True, folder=folder, filename=filename)
             
             # Calculate the rmd wrt to the FB centers.
             next_centers = self.L_centers
