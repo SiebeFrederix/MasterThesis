@@ -894,7 +894,8 @@ class Localizer:
         # Generate the FB reference centers for the rmd metric
         self.set_scheme('FB')
         self.optimize_line_search()
-        self.write_centers()
+        self.L_centers = np.einsum('ji,jka,ki->ia', self.W,
+                                   self.center_matrix, self.W, optimize=True)/angstrom
         FB_ref_centers = self.L_centers
         prev_centers = self.L_centers
         
