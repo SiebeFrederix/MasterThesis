@@ -26,7 +26,7 @@ if __name__ == '__main__':
     parser.add_argument('-lot', default='scf', type=str)
     args = parser.parse_args()
     
-    foldername = 'hpc_run2/' + args.scheme + '/'
+    foldername = 'hpc_run3/' + args.scheme + '/'
 #     foldername = 'test_runs/' + args.scheme + '/'
     basisset = 'aug-cc-pvtz'
 #     basisset = '6-311ppg_d_p_'

@@ -709,8 +709,10 @@ class Localizer:
                 self.conv_hist = conv
                 self.cost_hist = cost
                 self.step_hist = step_hist
-                self.W = W
-                self.L_occ = np.dot(self.C_occ, W)
+                # We do not save matrices that don't contain
+                # interesting info.
+#                 self.W = W
+#                 self.L_occ = np.dot(self.C_occ, W)
                 return False
             
             # update unitary matrix
@@ -720,8 +722,10 @@ class Localizer:
         self.conv_hist = conv
         self.cost_hist = cost
         self.step_hist = step_hist
-        self.W = W
-        self.L_occ = np.dot(self.C_occ, W)
+        # We do not save matrices that don't contain
+        # interesting info.
+#         self.W = W
+#         self.L_occ = np.dot(self.C_occ, W)
         print('No convergence')
         return False
     
@@ -907,8 +911,11 @@ class Localizer:
         if inc_pot:
             esp_rmsd = np.zeros((steps))
         quad_diff = np.zeros((steps,3,3))
+        quad_total = np.zeros((steps,3,3))
+        quad_local = np.zeros((steps,3,3))
         V4_cost_val = np.zeros((steps))
         optimizer_convergence = np.zeros((steps))
+        n_iterations = 0
         
         for i,w in enumerate(weight):
             self.set_scheme(scheme, w)
@@ -916,6 +923,7 @@ class Localizer:
             conv = self.optimize_line_search()
             if not conv:
                 print('parameter too high, cost badly conditioned: NO CONVERGENCE/ABORTED')
+                n_iterations = i
                 break
             self.write_centers(append=True, folder=folder, filename=filename)
             
@@ -930,6 +938,8 @@ class Localizer:
                 esp_rmsd[i] = self.compute_esp_rmsd()
             
             quad_diff[i] = self.compare_quadrupole()
+            quad_total[i] = self.total_loc_quadrupole
+            quad_local[i] = self.total_quadrupole
             V4_cost_val[i] = self.V4_cost(self.W)
             # pick the last non-zero entry
             optimizer_convergence[i] = self.conv_hist[np.where(self.conv_hist != 0.)][-1]
@@ -939,8 +949,11 @@ class Localizer:
         output_dict = {'PenaltyVals' : weight.tolist(),
                        'RootMeanDisplacement' : rmd_FB.tolist(),
                        'QuadDifference' : quad_diff.tolist(),
+                       'QuadTotal' : quad_total.tolist(),
+                       'QuadLocal' : quad_local.tolist(),
                        'V4CostVals' : V4_cost_val.tolist(),
-                       'OptimizerConv' : optimizer_convergence.tolist()}
+                       'OptimizerConv' : optimizer_convergence.tolist(),
+                       'nIterations' : n_iterations}
         if inc_pot:
             output_dict['ESPrmsd'] = esp_rmsd.tolist()
         
