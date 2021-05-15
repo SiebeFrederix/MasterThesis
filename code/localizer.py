@@ -921,6 +921,7 @@ class Localizer:
             self.set_scheme(scheme, w)
             print(self.scheme)
             conv = self.optimize_line_search()
+            n_iterations = i+1
             if not conv:
                 print('parameter too high, cost badly conditioned: NO CONVERGENCE/ABORTED')
                 n_iterations = i
