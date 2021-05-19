@@ -7,10 +7,9 @@ from molmod.units import angstrom, debye
 
 import matplotlib.pyplot as plt
 
-#importing the QM7 database
-data = dict(loadmat('../molecule_geometries/qm7.mat'))
-Z = data['Z'] # numbers
-R = data['R']/angstrom # positions in angstrom
+#importing the centered QM7 database
+Z = np.load('../data/molecule_geometries/benchmarking_dataset_Z.npy')
+R = np.load('../data/molecule_geometries/benchmarking_dataset_R.npy')
 
 if __name__ == '__main__':
     import argparse
@@ -20,7 +19,7 @@ if __name__ == '__main__':
     parser.add_argument('-penalty', default=0., type=float)
     args = parser.parse_args()
     
-    foldername = '../xyz_files/hpc_run1/'
+    foldername = '../data/xyz_files/test_runs/'
     
     loc = Localizer(Z[args.index],R[args.index],args.index)
     loc.set_scheme(name=args.scheme, p=args.penalty)
