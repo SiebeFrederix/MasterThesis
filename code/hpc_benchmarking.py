@@ -54,11 +54,14 @@ if __name__ == '__main__':
         loc.set_scheme(name=args.scheme, p=args.penalty)
         conv = loc.optimize_line_search(nsteps=1000, psi4_guess=False)
         
-        output_dict = {'Convergence' : conv,
-                       'QuadCompare' : loc.compare_quadrupole().tolist(),
-                       'QuadTotal' : loc.total_quadrupole.tolist(),
-                       'QuadLocal' : loc.total_loc_quadrupole.tolist(),
-                       'ValueCostV4' : float(loc.V4_cost(loc.W))}
+        if conv:
+            output_dict = {'Convergence' : conv,
+                           'QuadCompare' : loc.compare_quadrupole().tolist(),
+                           'QuadTotal' : loc.total_quadrupole.tolist(),
+                           'QuadLocal' : loc.total_loc_quadrupole.tolist(),
+                           'ValueCostV4' : float(loc.V4_cost(loc.W))}
+        else:
+            output_dict = {'Convergence' : conv}
         
         if args.scheme != 'PM':
             output_dict['nSteps'] = int(np.where(loc.conv_hist != 0.)[0][-1])
