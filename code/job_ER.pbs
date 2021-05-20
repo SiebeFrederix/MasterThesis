@@ -1,0 +1,14 @@
+#!/bin/bash
+#PBS -N job_ER
+#PBS -l walltime=12:00:00
+#PBS -l mem=32gb
+#PBS -l nodes=1:ppn=8
+
+source activate p4env
+
+cd ${PBS_O_WORKDIR}
+
+python hpc_benchmarking.py -start 0 -stop 50 -cores 8 -memory 24. -scheme ER
+
+exit 0
+

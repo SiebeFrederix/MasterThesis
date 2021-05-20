@@ -7,6 +7,7 @@ from molmod.units import angstrom, debye
 
 import matplotlib.pyplot as plt
 import json
+import gc
 
 #importing the centered QM7 database
 Z = np.load('../data/molecule_geometries/benchmarking_dataset_Z.npy')
@@ -28,8 +29,8 @@ if __name__ == '__main__':
     
     foldername = 'hpc_run2/'
 #     foldername = 'test_runs/'
-    basisset = 'aug-cc-pvtz'
-#     basisset = '6-311ppg_d_p_'
+#     basisset = 'aug-cc-pvtz'
+    basisset = '6-311ppg_d_p_'
 #     lot = 'scf'
 #     lot = 'b3lyp'
     import_data = True
@@ -68,14 +69,17 @@ if __name__ == '__main__':
         
         output_list.append(output_dict)
         
+        json_filename = '../data/benchmarking/' + foldername + args.scheme + '/'
+        json_filename += args.scheme + '_' + str(args.start) + '_' + str(i) + '.json'
+        with open(json_filename, 'w') as fout:
+            json.dump(output_list, fout)
+        fout.close()
+        
         if not loc.is_imported:
             loc.model.clean()
+            del loc
+            gc.collect()
     
-    json_filename = '../data/benchmarking/' + foldername + args.scheme + '/'
-    json_filename += args.scheme + '_' + str(args.start) + '_' + str(args.stop) + '.json'
-    with open(json_filename, 'w') as fout:
-        json.dump(output_list, fout)
-    fout.close()
         
         
 
