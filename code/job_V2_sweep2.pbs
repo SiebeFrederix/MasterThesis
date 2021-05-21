@@ -1,0 +1,14 @@
+#!/bin/bash
+#PBS -N job_V2_sweep2
+#PBS -l walltime=12:00:00
+#PBS -l mem=6gb
+#PBS -l nodes=1:ppn=1
+
+source activate p4env
+
+cd ${PBS_O_WORKDIR}
+
+python hpc_benchmarking_sweep.py -start 200 -stop 350 -cores 1 -memory 6. -scheme V2
+
+exit 0
+

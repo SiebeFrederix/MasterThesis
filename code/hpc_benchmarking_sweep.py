@@ -52,7 +52,7 @@ if __name__ == '__main__':
         loc = Localizer(Z[i], R[i], qm7_idxs[i], basisset = basisset, lot = args.lot,
                        cores = args.cores, memory = args.memory*1e+09, check_import=import_data)
         
-        sweep_dict = loc.perform_sweep(p_min=0.,p_max=5., steps=30, scheme=args.scheme,
+        sweep_dict = loc.perform_sweep(p_min=0.,p_max=0.5, steps=30, scheme=args.scheme,
                                        folder='../data/xyz_files/' + foldername + 'sweeps/')
         
         output_dict = {'MolNameIdx' : loc.generate_molname(scheme_name=False),
