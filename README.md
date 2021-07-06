@@ -33,10 +33,10 @@ filename=(index in QM7)+(molecular formula)+(cost function name).fchk
 
 ### molecule_geometries:
 Contains npy/mat files with molecule geometries and nuclear charges
-benchmarking_*.npy: 500 randomly selected molecules of the QM7 dataset.
+benchmarking_.npy: 500 randomly selected molecules of the QM7 dataset.
 qm7.mat: QM7 dataset as downloaded from http://quantum-machine.org/datasets/.
 qm7_R_centered.npy: QM7 geometries centered at the origin.
-optimized_*.npy: Select number of molecule from QM7, optimized using HF.
+optimized_.npy: Select number of molecule from QM7, optimized using HF.
 positions.npy+nuclei_numbers.npy: Set of molecules with "weird" AEPs using FB.
 
 ### Potential_data:
