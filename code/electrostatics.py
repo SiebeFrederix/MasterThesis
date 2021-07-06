@@ -41,8 +41,9 @@ def generate_mask(grid, R, Z, r_max=7.):
         
         # if gridpoint lays within the VdW radius, it
         # gets set to -1, this indicates the interior 
-        # region. 
-        grid_min = np.where(dist_grid < vdw_radii[int(z)-1])
+        # region
+        grid_min = np.where(dist_grid < 4.)
+#         grid_min = np.where(dist_grid < vdw_radii[int(z)-1])
         mask[grid_min] = -1
         
         # Check if gridpoint lays outside r_max
