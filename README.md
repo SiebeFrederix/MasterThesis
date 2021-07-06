@@ -11,9 +11,9 @@ Code: Contains the main code base for localization calculations. There are some 
 ## The data folder
 
 ### ab_initio_data:
-json files containing the Alpha Coefficients, amount of orbitals, dipole matrix elements of the orbitals, quadrupole tensor matrix elements of the orbitals, quadrupole tensors of the orbitals and the total energy.
-Naming:
-foldername= basisset
+json files containing the Alpha Coefficients, amount of orbitals, dipole matrix elements of the orbitals, quadrupole tensor matrix elements of the orbitals, quadrupole tensors of the orbitals and the total energy.__
+Naming:__
+foldername= basisset__
 filename= (index in QM7)+(molecular formula)+(basisset)+(level of theory).json
 
 ### benchmarking:
